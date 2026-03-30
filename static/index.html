@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>OpenEnv · DataCleaning</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600;700&family=Syne:wght@400;600;800&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg:      #0a0c0f;
+    --surface: #111318;
+    --border:  #1e2229;
+    --accent:  #00e5ff;
+    --green:   #39ff14;
+    --amber:   #ffb300;
+    --red:     #ff3b3b;
+    --text:    #e2e8f0;
+    --muted:   #64748b;
+    --radius:  6px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'JetBrains Mono', monospace; min-height: 100vh; }
+
+  /* GRID LAYOUT */
+  .shell { display: grid; grid-template-rows: 56px 1fr; min-height: 100vh; }
+
+  /* TOP BAR */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 32px; border-bottom: 1px solid var(--border);
+    background: rgba(10,12,15,.95); backdrop-filter: blur(8px);
+    position: sticky; top: 0; z-index: 100;
+  }
+  .logo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.1rem; letter-spacing: -0.5px; }
+  .logo span { color: var(--accent); }
+  .pill {
+    font-size: .65rem; padding: 2px 10px; border-radius: 20px;
+    border: 1px solid var(--accent); color: var(--accent); letter-spacing: 1px;
+  }
+
+  /* MAIN COLUMNS */
+  .main { display: grid; grid-template-columns: 260px 1fr 320px; gap: 0; overflow: hidden; height: calc(100vh - 56px); }
+
+  /* SIDEBAR */
+  aside {
+    border-right: 1px solid var(--border); padding: 24px 16px; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 20px;
+  }
+  .section-title { font-size: .65rem; letter-spacing: 2px; color: var(--muted); text-transform: uppercase; margin-bottom: 8px; }
+
+  .task-card {
+    border: 1px solid var(--border); border-radius: var(--radius); padding: 12px;
+    cursor: pointer; transition: all .15s ease; position: relative; overflow: hidden;
+  }
+  .task-card::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: var(--muted); transition: background .15s;
+  }
+  .task-card:hover { border-color: var(--accent); background: rgba(0,229,255,.04); }
+  .task-card:hover::before, .task-card.active::before { background: var(--accent); }
+  .task-card.active { border-color: var(--accent); background: rgba(0,229,255,.06); }
+  .task-name { font-size: .78rem; font-weight: 600; margin-bottom: 4px; }
+  .task-meta { font-size: .65rem; color: var(--muted); display: flex; gap: 8px; }
+  .badge {
+    font-size: .6rem; padding: 1px 7px; border-radius: 3px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: .5px;
+  }
+  .easy   { background: rgba(57,255,20,.15);  color: var(--green); }
+  .medium { background: rgba(255,179,0,.15);  color: var(--amber); }
+  .hard   { background: rgba(255,59,59,.15);  color: var(--red); }
+
+  /* SCORES */
+  .score-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .score-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 10px; text-align: center;
+  }
+  .score-val { font-size: 1.4rem; font-weight: 700; line-height: 1; }
+  .score-lbl { font-size: .6rem; color: var(--muted); margin-top: 2px; text-transform: uppercase; letter-spacing: 1px; }
+
+  /* PROGRESS BAR */
+  .prog-bar { background: var(--border); border-radius: 3px; height: 6px; overflow: hidden; }
+  .prog-fill { height: 100%; border-radius: 3px; transition: width .4s ease; }
+
+  /* CENTRE — TERMINAL */
+  .centre { display: flex; flex-direction: column; overflow: hidden; }
+  .obs-header {
+    padding: 16px 24px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 12px;
+  }
+  .obs-title { font-family: 'Syne', sans-serif; font-weight: 600; font-size: .95rem; }
+
+  .terminal {
+    flex: 1; overflow-y: auto; padding: 20px 24px;
+    font-size: .72rem; line-height: 1.8;
+  }
+  .terminal::-webkit-scrollbar { width: 4px; }
+  .terminal::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .t-line { display: flex; gap: 10px; margin-bottom: 2px; }
+  .t-ts   { color: var(--muted); min-width: 56px; }
+  .t-type { min-width: 80px; }
+  .t-obs  { color: var(--accent); }
+  .t-act  { color: var(--green); }
+  .t-rwd  { color: var(--amber); }
+  .t-err  { color: var(--red); }
+  .t-sys  { color: var(--muted); }
+
+  /* ACTION PANEL */
+  .action-panel {
+    border-left: 1px solid var(--border); padding: 20px; overflow-y: auto;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+
+  label { font-size: .68rem; color: var(--muted); display: block; margin-bottom: 4px; letter-spacing: .5px; }
+  select, input[type=text], input[type=number] {
+    width: 100%; background: var(--surface); border: 1px solid var(--border);
+    color: var(--text); font-family: 'JetBrains Mono', monospace;
+    font-size: .72rem; padding: 7px 10px; border-radius: var(--radius);
+    outline: none; transition: border-color .15s;
+  }
+  select:focus, input:focus { border-color: var(--accent); }
+
+  .field { margin-bottom: 10px; }
+
+  .btn {
+    width: 100%; padding: 10px; border-radius: var(--radius); border: none;
+    font-family: 'JetBrains Mono', monospace; font-size: .75rem; font-weight: 600;
+    cursor: pointer; transition: all .15s; letter-spacing: .5px;
+  }
+  .btn-primary { background: var(--accent); color: #000; }
+  .btn-primary:hover { background: #00c8e0; }
+  .btn-primary:disabled { background: var(--border); color: var(--muted); cursor: not-allowed; }
+  .btn-danger { background: transparent; border: 1px solid var(--red); color: var(--red); margin-top: 4px; }
+  .btn-danger:hover { background: rgba(255,59,59,.1); }
+
+  /* COLUMNS TABLE */
+  .col-table { font-size: .65rem; width: 100%; border-collapse: collapse; }
+  .col-table th { color: var(--muted); text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+  .col-table td { padding: 4px 6px; border-bottom: 1px solid rgba(30,34,41,.5); }
+  .issue-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--red); display: inline-block; margin-right: 4px; }
+  .ok-dot    { width: 6px; height: 6px; border-radius: 50%; background: var(--green); display: inline-block; margin-right: 4px; }
+
+  /* Violations */
+  .violation {
+    background: rgba(255,59,59,.06); border: 1px solid rgba(255,59,59,.2);
+    border-radius: var(--radius); padding: 8px 12px; font-size: .68rem; margin-bottom: 6px;
+  }
+  .violation strong { color: var(--red); }
+
+  /* Spinner */
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .spinner {
+    width: 14px; height: 14px; border: 2px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin .7s linear infinite; display: none;
+  }
+  .loading .spinner { display: inline-block; }
+
+  /* Glow pulse on active */
+  @keyframes glow {
+    0%,100% { box-shadow: 0 0 0 0 rgba(0,229,255,0); }
+    50%      { box-shadow: 0 0 12px 2px rgba(0,229,255,.25); }
+  }
+  .task-card.active { animation: glow 2s ease-in-out infinite; }
+
+  .divider { border: none; border-top: 1px solid var(--border); }
+
+  .empty-state { text-align: center; color: var(--muted); font-size: .75rem; padding: 40px 0; }
+</style>
+</head>
+<body>
+<div class="shell">
+  <!-- TOP BAR -->
+  <header>
+    <div class="logo">OpenEnv · <span>DataCleaning</span></div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <div class="spinner" id="globalSpinner"></div>
+      <div class="pill">v1.0.0</div>
+    </div>
+  </header>
+
+  <div class="main">
+    <!-- LEFT SIDEBAR -->
+    <aside>
+      <div>
+        <div class="section-title">Tasks</div>
+        <div id="taskList"></div>
+      </div>
+
+      <hr class="divider"/>
+
+      <div>
+        <div class="section-title">Episode Stats</div>
+        <div class="score-grid">
+          <div class="score-box">
+            <div class="score-val" id="qualityScore" style="color:var(--accent)">—</div>
+            <div class="score-lbl">Quality</div>
+          </div>
+          <div class="score-box">
+            <div class="score-val" id="stepNum" style="color:var(--amber)">0</div>
+            <div class="score-lbl">Steps</div>
+          </div>
+          <div class="score-box">
+            <div class="score-val" id="issueCount" style="color:var(--red)">—</div>
+            <div class="score-lbl">Issues</div>
+          </div>
+          <div class="score-box">
+            <div class="score-val" id="epReward" style="color:var(--green)">0.00</div>
+            <div class="score-lbl">Reward</div>
+          </div>
+        </div>
+        <div style="margin-top:10px">
+          <label>Progress to completion</label>
+          <div class="prog-bar">
+            <div class="prog-fill" id="progFill" style="width:0%;background:var(--accent)"></div>
+          </div>
+        </div>
+      </div>
+
+      <hr class="divider"/>
+
+      <div>
+        <div class="section-title">Column Profiles</div>
+        <div id="colProfiles"><div class="empty-state">Reset to load</div></div>
+      </div>
+
+      <hr class="divider"/>
+
+      <div id="violationsSection" style="display:none">
+        <div class="section-title">Constraint Violations</div>
+        <div id="violations"></div>
+      </div>
+    </aside>
+
+    <!-- CENTRE TERMINAL -->
+    <div class="centre">
+      <div class="obs-header">
+        <div class="obs-title">Agent Terminal</div>
+        <div style="margin-left:auto;font-size:.68rem;color:var(--muted)" id="taskLabel">No task loaded</div>
+      </div>
+      <div class="terminal" id="terminal">
+        <div class="empty-state" style="padding-top:80px">
+          ↑ Select a task and click <strong style="color:var(--accent)">RESET</strong> to begin
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT ACTION PANEL -->
+    <div class="action-panel">
+      <div>
+        <div class="section-title">Action Builder</div>
+
+        <div class="field">
+          <label>ACTION TYPE</label>
+          <select id="actionType" onchange="onActionTypeChange()">
+            <option value="fill_nulls">fill_nulls</option>
+            <option value="cast_column">cast_column</option>
+            <option value="normalize_format">normalize_format</option>
+            <option value="rename_value">rename_value</option>
+            <option value="clip_values">clip_values</option>
+            <option value="drop_rows">drop_rows</option>
+            <option value="drop_duplicates">drop_duplicates</option>
+            <option value="flag_outliers">flag_outliers</option>
+            <option value="repair_constraint">repair_constraint</option>
+            <option value="submit">submit</option>
+          </select>
+        </div>
+
+        <div id="fieldColumn" class="field">
+          <label>COLUMN</label>
+          <input type="text" id="fColumn" placeholder="e.g. age"/>
+        </div>
+
+        <div id="fieldStrategy" class="field" style="display:none">
+          <label>FILL STRATEGY</label>
+          <select id="fStrategy">
+            <option value="mean">mean</option>
+            <option value="median">median</option>
+            <option value="mode">mode</option>
+            <option value="ffill">ffill</option>
+            <option value="bfill">bfill</option>
+            <option value="constant">constant</option>
+            <option value="drop">drop</option>
+          </select>
+        </div>
+
+        <div id="fieldConstant" class="field" style="display:none">
+          <label>CONSTANT VALUE</label>
+          <input type="text" id="fConstant" placeholder="e.g. 0"/>
+        </div>
+
+        <div id="fieldTargetType" class="field" style="display:none">
+          <label>TARGET TYPE</label>
+          <select id="fTargetType">
+            <option value="int">int</option>
+            <option value="float">float</option>
+            <option value="string">string</option>
+            <option value="date">date</option>
+            <option value="bool">bool</option>
+          </select>
+        </div>
+
+        <div id="fieldFormat" class="field" style="display:none">
+          <label>FORMAT TYPE</label>
+          <select id="fFormatType">
+            <option value="phone">phone</option>
+            <option value="date">date</option>
+            <option value="currency">currency</option>
+            <option value="email">email</option>
+            <option value="postcode">postcode</option>
+          </select>
+        </div>
+
+        <div id="fieldOldVal" class="field" style="display:none">
+          <label>OLD VALUE</label>
+          <input type="text" id="fOldValue" placeholder="e.g. Cat B"/>
+        </div>
+        <div id="fieldNewVal" class="field" style="display:none">
+          <label>NEW VALUE</label>
+          <input type="text" id="fNewValue" placeholder="e.g. Category B"/>
+        </div>
+
+        <div id="fieldClipMin" class="field" style="display:none">
+          <label>MIN VALUE</label>
+          <input type="number" id="fMinVal" placeholder="e.g. 0"/>
+        </div>
+        <div id="fieldClipMax" class="field" style="display:none">
+          <label>MAX VALUE</label>
+          <input type="number" id="fMaxVal" placeholder="e.g. 100"/>
+        </div>
+
+        <div id="fieldConstraint" class="field" style="display:none">
+          <label>CONSTRAINT ID</label>
+          <select id="fConstraint">
+            <option value="age_range">age_range</option>
+            <option value="salary_positive">salary_positive</option>
+            <option value="end_after_start">end_after_start</option>
+            <option value="dept_valid">dept_valid</option>
+            <option value="rating_range">rating_range</option>
+            <option value="email_format">email_format</option>
+          </select>
+        </div>
+
+        <div id="fieldRows" class="field" style="display:none">
+          <label>ROW INDICES (comma-sep)</label>
+          <input type="text" id="fRowIndices" placeholder="e.g. 0,5,12"/>
+        </div>
+      </div>
+
+      <button class="btn btn-primary" id="stepBtn" onclick="doStep()" disabled>
+        ▶ STEP
+      </button>
+
+      <hr class="divider"/>
+
+      <div>
+        <div class="section-title">Session Control</div>
+        <div class="field">
+          <label>TASK</label>
+          <select id="resetTask">
+            <option value="task_easy">task_easy — Null Imputation</option>
+            <option value="task_medium">task_medium — Format Standardization</option>
+            <option value="task_hard">task_hard — Constraint Repair</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>SEED</label>
+          <input type="number" id="resetSeed" value="42"/>
+        </div>
+        <button class="btn btn-danger" onclick="doReset()">⟳ RESET ENVIRONMENT</button>
+      </div>
+
+      <hr class="divider"/>
+
+      <div>
+        <div class="section-title">Quick Actions</div>
+        <button class="btn btn-primary" style="margin-bottom:6px" onclick="quickFillAll()">Fill All Nulls (median)</button>
+        <button class="btn btn-primary" style="background:var(--green);margin-bottom:6px" onclick="quickRepairAll()">Repair All Constraints</button>
+        <button class="btn btn-primary" style="background:var(--amber);color:#000" onclick="doSubmit()">⏎ SUBMIT</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';
+let currentTask = 'task_easy';
+let epRewardTotal = 0;
+
+// ── Task list ──────────────────────────────────────────────────────────────
+const TASKS = [
+  { id: 'task_easy',   name: 'Null Value Imputation',               diff: 'easy',   steps: 20 },
+  { id: 'task_medium', name: 'Type & Format Standardization',       diff: 'medium', steps: 30 },
+  { id: 'task_hard',   name: 'Constraint Validation & Repair',      diff: 'hard',   steps: 40 },
+];
+
+function buildTaskList() {
+  const el = document.getElementById('taskList');
+  el.innerHTML = TASKS.map(t => `
+    <div class="task-card ${t.id===currentTask?'active':''}" id="tc-${t.id}" onclick="selectTask('${t.id}')">
+      <div class="task-name">${t.name}</div>
+      <div class="task-meta">
+        <span class="badge ${t.diff}">${t.diff}</span>
+        <span>${t.steps} steps</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function selectTask(id) {
+  currentTask = id;
+  document.getElementById('resetTask').value = id;
+  buildTaskList();
+}
+
+// ── Spinner ────────────────────────────────────────────────────────────────
+function setLoading(on) {
+  document.getElementById('globalSpinner').style.display = on ? 'inline-block' : 'none';
+  document.getElementById('stepBtn').disabled = on;
+}
+
+// ── Terminal log ───────────────────────────────────────────────────────────
+function log(type, msg) {
+  const term = document.getElementById('terminal');
+  const ts = new Date().toLocaleTimeString('en', { hour12: false });
+  const cls = { obs: 't-obs', act: 't-act', rwd: 't-rwd', err: 't-err', sys: 't-sys' }[type] || '';
+  const label = { obs: '[OBS]', act: '[ACT]', rwd: '[RWD]', err: '[ERR]', sys: '[SYS]' }[type] || type;
+  term.innerHTML += `<div class="t-line"><span class="t-ts">${ts}</span><span class="t-type ${cls}">${label}</span><span class="${cls}">${msg}</span></div>`;
+  term.scrollTop = term.scrollHeight;
+}
+
+function clearTerminal() {
+  document.getElementById('terminal').innerHTML = '';
+}
+
+// ── Update UI from observation ─────────────────────────────────────────────
+function updateUI(obs, reward) {
+  // stats
+  const q = obs.quality_score;
+  document.getElementById('qualityScore').textContent = q.toFixed(3);
+  document.getElementById('qualityScore').style.color = q > .8 ? 'var(--green)' : q > .5 ? 'var(--amber)' : 'var(--red)';
+  document.getElementById('stepNum').textContent = obs.step_number + '/' + obs.max_steps;
+  document.getElementById('issueCount').textContent = obs.issues_remaining;
+  epRewardTotal += reward ? reward.total : 0;
+  document.getElementById('epReward').textContent = epRewardTotal.toFixed(3);
+  document.getElementById('progFill').style.width = (q * 100).toFixed(1) + '%';
+  document.getElementById('progFill').style.background = q > .8 ? 'var(--green)' : q > .5 ? 'var(--amber)' : 'var(--accent)';
+  document.getElementById('taskLabel').textContent = obs.task_id + ' · step ' + obs.step_number;
+
+  // column profiles
+  const cpEl = document.getElementById('colProfiles');
+  cpEl.innerHTML = `<table class="col-table">
+    <tr><th>col</th><th>nulls</th><th>issues</th></tr>
+    ${obs.column_profiles.map(p => `
+      <tr>
+        <td>${p.name}</td>
+        <td>${p.null_count > 0 ? `<span style="color:var(--red)">${p.null_count}</span>` : '0'}</td>
+        <td>${p.issues.length ? `<span class="issue-dot"></span>${p.issues[0]}` : `<span class="ok-dot"></span>ok`}</td>
+      </tr>
+    `).join('')}
+  </table>`;
+
+  // violations
+  const vsEl = document.getElementById('violationsSection');
+  const vEl  = document.getElementById('violations');
+  if (obs.constraint_violations && obs.constraint_violations.length) {
+    vsEl.style.display = 'block';
+    vEl.innerHTML = obs.constraint_violations.map(v => `
+      <div class="violation">
+        <strong>${v.constraint_id}</strong><br/>
+        ${v.description}<br/>
+        <span style="color:var(--muted)">${v.affected_rows.length} affected rows</span>
+      </div>
+    `).join('');
+  } else {
+    vsEl.style.display = 'none';
+  }
+
+  // enable step btn
+  document.getElementById('stepBtn').disabled = obs.done;
+}
+
+// ── Reset ──────────────────────────────────────────────────────────────────
+async function doReset() {
+  const taskId = document.getElementById('resetTask').value;
+  const seed   = parseInt(document.getElementById('resetSeed').value) || 42;
+  currentTask  = taskId;
+  epRewardTotal = 0;
+  buildTaskList();
+  clearTerminal();
+  setLoading(true);
+  log('sys', `Resetting → task=${taskId}, seed=${seed}`);
+  try {
+    const res = await fetch(`${API}/reset?task_id=${taskId}&seed=${seed}`, { method: 'POST' });
+    const obs = await res.json();
+    updateUI(obs, null);
+    log('obs', `Reset complete. Rows=${obs.total_rows} Cols=${obs.total_columns} Quality=${obs.quality_score}`);
+    log('obs', `Issues: ${obs.issues_remaining} | Max steps: ${obs.max_steps}`);
+    document.getElementById('stepBtn').disabled = false;
+  } catch(e) {
+    log('err', e.message);
+  } finally {
+    setLoading(false);
+  }
+}
+
+// ── Step ───────────────────────────────────────────────────────────────────
+function buildAction() {
+  const type = document.getElementById('actionType').value;
+  const action = { action_type: type };
+
+  const col = document.getElementById('fColumn').value.trim();
+  if (col) action.column = col;
+
+  if (type === 'fill_nulls') {
+    action.strategy = document.getElementById('fStrategy').value;
+    if (action.strategy === 'constant') {
+      action.value = document.getElementById('fConstant').value;
+    }
+  }
+  if (type === 'cast_column') action.target_type = document.getElementById('fTargetType').value;
+  if (type === 'normalize_format') action.format_type = document.getElementById('fFormatType').value;
+  if (type === 'rename_value') {
+    action.old_value = document.getElementById('fOldValue').value;
+    action.new_value = document.getElementById('fNewValue').value;
+  }
+  if (type === 'clip_values') {
+    const mn = document.getElementById('fMinVal').value;
+    const mx = document.getElementById('fMaxVal').value;
+    if (mn !== '') action.min_val = parseFloat(mn);
+    if (mx !== '') action.max_val = parseFloat(mx);
+  }
+  if (type === 'repair_constraint') action.constraint = document.getElementById('fConstraint').value;
+  if (type === 'drop_rows') {
+    const ri = document.getElementById('fRowIndices').value;
+    if (ri) action.row_indices = ri.split(',').map(x => parseInt(x.trim())).filter(n => !isNaN(n));
+  }
+  return action;
+}
+
+async function doStep() {
+  const action = buildAction();
+  setLoading(true);
+  log('act', JSON.stringify(action));
+  try {
+    const res = await fetch(`${API}/step`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(action),
+    });
+    const result = await res.json();
+    const obs = result.observation;
+    const rwd = result.reward;
+    updateUI(obs, rwd);
+    const rwdColor = rwd.total >= 0 ? 'color:var(--green)' : 'color:var(--red)';
+    log('rwd', `reward=${rwd.total > 0 ? '+' : ''}${rwd.total.toFixed(3)} | quality=${obs.quality_score}`);
+    if (obs.last_action_error) log('err', obs.last_action_error);
+    if (result.done || obs.done) {
+      log('sys', `Episode complete! Final quality: ${obs.quality_score}`);
+    }
+  } catch(e) {
+    log('err', e.message);
+  } finally {
+    setLoading(false);
+  }
+}
+
+// ── Quick actions ──────────────────────────────────────────────────────────
+async function quickFillAll() {
+  const cols = ['age','income','loyalty_score','salary','performance_rating'];
+  for (const col of cols) {
+    const action = { action_type: 'fill_nulls', column: col, strategy: 'median' };
+    await fetch(`${API}/step`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(action) });
+  }
+  // refresh state
+  const res = await fetch(`${API}/state`);
+  const st  = await res.json();
+  log('sys', `Quick fill complete. Issues remaining: ${st.issues_remaining}`);
+  // trigger a neutral step to refresh obs
+  doStep();
+}
+
+async function quickRepairAll() {
+  const constraints = ['age_range','salary_positive','end_after_start','dept_valid','rating_range','email_format'];
+  for (const c of constraints) {
+    const action = { action_type: 'repair_constraint', constraint: c };
+    await fetch(`${API}/step`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(action) });
+  }
+  log('sys', 'Repaired all constraints.');
+  doStep();
+}
+
+async function doSubmit() {
+  document.getElementById('actionType').value = 'submit';
+  await doStep();
+}
+
+// ── Action type change → show/hide fields ──────────────────────────────────
+function onActionTypeChange() {
+  const t = document.getElementById('actionType').value;
+  const show = (id, on) => document.getElementById(id).style.display = on ? 'block' : 'none';
+
+  show('fieldColumn',     !['submit','drop_duplicates','repair_constraint'].includes(t));
+  show('fieldStrategy',   t === 'fill_nulls');
+  show('fieldConstant',   t === 'fill_nulls');
+  show('fieldTargetType', t === 'cast_column');
+  show('fieldFormat',     t === 'normalize_format');
+  show('fieldOldVal',     t === 'rename_value');
+  show('fieldNewVal',     t === 'rename_value');
+  show('fieldClipMin',    t === 'clip_values');
+  show('fieldClipMax',    t === 'clip_values');
+  show('fieldConstraint', t === 'repair_constraint');
+  show('fieldRows',       t === 'drop_rows');
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+buildTaskList();
+onActionTypeChange();
+</script>
+</body>
+</html>

@@ -1,0 +1,67 @@
+name: data-cleaning-env
+version: "1.0.0"
+description: >
+  A real-world data cleaning and validation environment where AI agents
+  must detect, classify, and fix data quality issues in tabular datasets.
+  Tasks range from simple null-value imputation to complex multi-column
+  constraint validation and repair.
+
+author: OpenEnv DataCleaning Team
+license: MIT
+endpoint: https://hareesh999-openenv-datacleaning.hf.space
+
+tags:
+  - data-quality
+  - data-cleaning
+  - tabular
+  - real-world
+  - validation
+
+environment:
+  type: stateful
+  observation_type: DataObservation
+  action_type: DataAction
+  reward_type: DataReward
+
+tasks:
+  - id: task_easy
+    name: "Null Value Imputation"
+    difficulty: easy
+    description: >
+      Identify and fill missing values in a customer dataset using
+      appropriate strategies (mean, median, mode, forward-fill).
+    max_steps: 20
+    target_score: 0.8
+
+  - id: task_medium
+    name: "Type Coercion & Format Standardization"
+    difficulty: medium
+    description: >
+      Detect and fix inconsistent data types, date formats, phone number
+      formats, and categorical encodings across a sales dataset.
+    max_steps: 30
+    target_score: 0.75
+
+  - id: task_hard
+    name: "Multi-Column Constraint Validation & Repair"
+    difficulty: hard
+    description: >
+      Identify and repair violations of business rules across multiple
+      columns: referential integrity, range constraints, cross-column
+      dependencies, and statistical outlier removal.
+    max_steps: 40
+    target_score: 0.7
+
+api:
+  base_path: /
+  endpoints:
+    - POST /reset
+    - POST /step
+    - GET /state
+    - GET /tasks
+    - GET /health
+    - GET /validate
+
+runtime:
+  python: "3.11"
+  framework: fastapi
